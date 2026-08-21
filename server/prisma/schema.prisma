@@ -1,0 +1,119 @@
+// Laundry Business Management System - Database Schema
+//
+// Default datasource is SQLite for zero-config local development.
+// For production, switch the provider to "postgresql" and point
+// DATABASE_URL at your Postgres instance (see README.md). Note: SQLite
+// has no native enum type, so enum-like fields below are plain Strings
+// whose allowed values are enforced by zod at the API layer (see the
+// *_VALUES constants in src/constants.ts). If you migrate to Postgres
+// you may optionally convert these back to real Prisma enums.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Role:            ADMIN | MANAGER | STAFF
+// ServiceUnit:     PER_ITEM | PER_KG | PER_LOAD
+// ServiceCategory: WASH_FOLD | DRY_CLEAN | IRONING | ALTERATION | BEDDING | OTHER
+// OrderStatus:     RECEIVED | IN_PROGRESS | READY_FOR_PICKUP | OUT_FOR_DELIVERY | COMPLETED | CANCELLED
+// PaymentStatus:   UNPAID | PARTIAL | PAID
+// PaymentMethod:   CASH | CARD | MOBILE_MONEY | BANK_TRANSFER | ONLINE
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   @default("STAFF")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  ordersCreated Order[]   @relation("OrderCreatedBy")
+  payments      Payment[] @relation("PaymentRecordedBy")
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @unique
+  email     String?
+  address   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([name])
+}
+
+model Service {
+  id        String   @id @default(cuid())
+  name      String
+  category  String   @default("OTHER")
+  unit      String   @default("PER_ITEM")
+  price     Float
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+}
+
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  status        String   @default("RECEIVED")
+  paymentStatus String   @default("UNPAID")
+  pickupDate    DateTime?
+  deliveryDate  DateTime?
+  notes         String?
+  discount      Float    @default(0)
+  taxRate       Float    @default(0)
+
+  createdById String?
+  createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+
+  items    OrderItem[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([customerId])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  serviceId String
+  service   Service @relation(fields: [serviceId], references: [id])
+  quantity  Float
+  unitPrice Float
+  subtotal  Float
+
+  @@index([orderId])
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  amount       Float
+  method       String   @default("CASH")
+  recordedById String?
+  recordedBy   User?    @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([orderId])
+}
